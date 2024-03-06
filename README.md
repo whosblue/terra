@@ -12,5 +12,11 @@ Once you've done that, make sure the Python file and the two txt files are extra
 Place your Anthropic key into the "anthropicAPIKey.txt" file.
 Place your Discord Application API key the into "discordAPIKey.txt" file.
 
+Finally, make a Discord server, invite your Discord bot to said server. MOST IMPORTANTLY, CREATE A CHANNEL CALLED terra.
+
 You can now run the Python file! Please report back here and make an issue if you encounter any issues.
 DO NOTE! I've found the Anthropic API very temperamental. It will sometimes throw an error saying something along the lines of "Overloaded." That's not caused by Terra, that's an Anthropic issue. Tell them to fix their servers!
+
+# Usage
+How do I use Terra, you ask? Once you've completed the installation guide AND INVITED YOUR DISCORD BOT A SERVER OF YOUR CHOICE, you need to chat in the #terra channel you created. You can send messages with images and text to Terra
+and it will respond accordingly. That's it! Check back here for new releases and additions to the code.
