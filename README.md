@@ -20,3 +20,8 @@ DO NOTE! I've found the Anthropic API very temperamental. It will sometimes thro
 # Usage
 How do I use Terra, you ask? Once you've completed the installation guide AND INVITED YOUR DISCORD BOT A SERVER OF YOUR CHOICE, you need to chat in the #terra channel you created. You can send messages with images and text to Terra
 and it will respond accordingly. That's it! Check back here for new releases and additions to the code.
+
+# IMPORTANT COMMANDS
+These are some pretty useful commands you can use while using Terra.
+- !e-brake - This restarts the program, helpful when Claude might freeze up.
+- !new-convo - This wipes the conversation history, as if you restarted the program. Brand new conversation!
