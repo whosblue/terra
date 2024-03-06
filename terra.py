@@ -37,10 +37,13 @@ try:
     with open('anthropicAPIKey.txt', 'r') as file:
         anthropicAPIKey = file.readline()
     print("Done.\n")
+    if anthropicAPIKey == "":  # Probably a really dumb way to do this.
+        raise
 except:
+    print("Something went wrong. Make sure your Anthropic API key is in a file named 'anthropicAPIkey.txt' and your API key is on the first line inside that file. Also ensure said file is located alongside this Python file.")
     for i in range(10):  # Just to warn the user that their API key was not detected.
         time.sleep(0.5) # Five seconds
-        print("Something went wrong. Make sure your Anthropic API key is in a file named 'anthropicAPIkey.txt' and your API key is on the first line inside that file. Also ensure said file is located alongside this Python file.")
+        
 
 print("Creating Anthropic client...")
 anthropicClient = anthropic.Anthropic(
@@ -187,13 +190,12 @@ intents.message_content = True
 
 client = MyClient(intents=intents)
 print("Getting Discord API key from local files...")
-try:
-    discordKey = ""
-    with open('discordAPIKey.txt', 'r') as file:
-        discordKey = file.readline()
-    print("Done, running Discord client.")
-    client.run(discordKey)
-except:
+discordKey = ""
+with open('discordAPIKey.txt', 'r') as file:
+    discordKey = file.readline()
+if discordKey == "":  # Do not put Discord client creation in a try except, so do this instead.
+    print("Sorry, your Discord application key was not detected. Make sure it's in a file named 'discordAPIKey.txt' and that your API key is on the first line. Also ensure said file is located alongside this Python file.")
     for i in range(10):
         time.sleep(0.5)
-        print("Sorry, your Discord application key was not detected. Make sure it's in a file named 'discordAPIKey.txt' and that your API key is on the first line. Also ensure said file is located alongside this Python file.")
+print("Done, running Discord client.")
+client.run(discordKey)
