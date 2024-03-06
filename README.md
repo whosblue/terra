@@ -17,6 +17,13 @@ Finally, make a Discord server, invite your Discord bot to said server. MOST IMP
 You can now run the Python file! Please report back here and make an issue if you encounter any issues.
 DO NOTE! I've found the Anthropic API very temperamental. It will sometimes throw an error saying something along the lines of "Overloaded." That's not caused by Terra, that's an Anthropic issue. Tell them to fix their servers!
 
+# Features
+Make sure to read the important commands second too.
+- Claude 3 Opus text
+- Claude 3 Opus vision (image recognition, can answer questions based on images)
+- Large context (documents) support.
+    By the way, to use this, simply input a .txt file into Discord as an attachment and Terra will handle it. You can also ask your question at the same time. Do not resend the txt over and over again!
+
 # Usage
 How do I use Terra, you ask? Once you've completed the installation guide AND INVITED YOUR DISCORD BOT A SERVER OF YOUR CHOICE, you need to chat in the #terra channel you created. You can send messages with images and text to Terra
 and it will respond accordingly. That's it! Check back here for new releases and additions to the code.
