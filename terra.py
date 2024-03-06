@@ -59,6 +59,8 @@ def emergencyRestart():  # Restarts program. Useful when AI hangs.
         print('Failed to restart program: ', e)
 
 
+
+
 def splitMessage(content, limit):  # Splits a given string into multiple parts according to a numerical limiter.
     return [content[i:i+limit] for i in range(0, len(content), limit)]
 
@@ -73,80 +75,91 @@ def writeToFile(string):  # Intended to log messages from all Discord servers th
 chatHistory=[]
 systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. Important: EMULATE HUMAN EMOTIONS!"
 async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment):
-    print("Registered chat...")
+    try:
+        print("Registered chat...")
 
-    if messageHasImageAttachment:
+        if messageHasImageAttachment:
 
-        image1_url = url
-        image1_data = ""
+            image1_url = url
+            image1_data = ""
 
-        httpResponse = httpx.get(image1_url)
+            httpResponse = httpx.get(image1_url)
 
-        # Check if the Content-Type of the response indicates a JPEG image
-        if httpResponse.headers['Content-Type'] == "image/jpeg":
-            image1_data = base64.b64encode(httpResponse.content).decode("utf-8")
-        else:
-            # The image is not a JPEG, so let's convert it
-            # Load the image from bytes
-            image = Image.open(io.BytesIO(httpResponse.content))
-            
-            # Convert the image to JPEG
-            with io.BytesIO() as output:
-                image.convert('RGB').save(output, format="JPEG")
-                jpeg_data = output.getvalue()  # Get the converted image bytes
-            
-            # Encode the converted image to base64
-            image1_data = base64.b64encode(jpeg_data).decode("utf-8")
+            # Check if the Content-Type of the response indicates a JPEG image
+            if httpResponse.headers['Content-Type'] == "image/jpeg":
+                image1_data = base64.b64encode(httpResponse.content).decode("utf-8")
+            else:
+                # The image is not a JPEG, so let's convert it
+                # Load the image from bytes
+                image = Image.open(io.BytesIO(httpResponse.content))
+                
+                # Convert the image to JPEG
+                with io.BytesIO() as output:
+                    image.convert('RGB').save(output, format="JPEG")
+                    jpeg_data = output.getvalue()  # Get the converted image bytes
+                
+                # Encode the converted image to base64
+                image1_data = base64.b64encode(jpeg_data).decode("utf-8")
 
-            print("Image has been converted to JPEG and encoded to base64.")
+                print("Image has been converted to JPEG and encoded to base64.")
 
-        chatHistory.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image1_data,
+            chatHistory.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image1_data,
+                        },
                     },
-                },
-                {
-                    "type": "text",
-                    "text": message
-                }
-            ],
-        })
-    else:
-        chatHistory.append({"role": "user", "content": f"{username}: "+ message})
-    print("Generating...")
-    streamMessage = ""
-    with anthropicClient.messages.stream(
-        max_tokens=1024,
-        messages=chatHistory,
-        model="claude-3-opus-20240229",
-        temperature=0.6
-    ) as stream:
-        for text in stream.text_stream:
-            await asyncio.sleep(0.1)
-            streamMessage += text
-            print(text, end="", flush=True)
-    print("Done.")
+                    {
+                        "type": "text",
+                        "text": message
+                    }
+                ],
+            })
+        else:
+            chatHistory.append({"role": "user", "content": f"{username}: "+ message})
+        print("Generating...")
+        streamMessage = ""
+        with anthropicClient.messages.stream(
+            max_tokens=1024,
+            messages=chatHistory,
+            model="claude-3-opus-20240229",
+            system=systemMessage
+        ) as stream:
+            print("Loading stream...")
+            for text in stream.text_stream:
+                print("Waiting...")
+                streamMessage += text
+                await asyncio.sleep(0.1)  # Used to give the main thread time to detect things (like non-Claude commands).
 
-    claudeMessage = streamMessage
-    chatHistory.append({"role": "assistant", "content": claudeMessage})
-    if len(claudeMessage) > 2000:  # Automatic length handler! 2000 is the character limit of Discord.
-            print("MESSSAGE OVER LIMIT! SPLITTING...")
-            chunks = splitMessage(claudeMessage, 2000)
-            await replyMessageObject.delete()  # Delete the message which replies to the user saying "Hang on..."
-            for chunk in chunks:
-                await messageObject.reply(chunk)  # Send the chunks as replies.
-                time.sleep(0.2)
-            print("Chunks sent successfully to user.")
-            return  # Exit. We're done.
-    
-    print(claudeMessage)
-    await replyMessageObject.edit(content=claudeMessage)
+        claudeMessage = streamMessage
+        chatHistory.append({"role": "assistant", "content": claudeMessage})
+        if len(claudeMessage) > 2000:  # Automatic length handler! 2000 is the character limit of Discord.
+                print("MESSSAGE OVER LIMIT! SPLITTING...")
+                chunks = splitMessage(claudeMessage, 2000)
+                await replyMessageObject.delete()  # Delete the message which replies to the user saying "Hang on..."
+                for chunk in chunks:
+                    await messageObject.reply(chunk)  # Send the chunks as replies.
+                    time.sleep(0.2)
+                print("Chunks sent successfully to user.")
+                return  # Exit. We're done.
+        
+        await replyMessageObject.edit(content=claudeMessage)
+        print("\nFinished.")
+    except Exception as e:
+        chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
+        print("There was an unexpected error. It was: " + str(e))
+        if "overloaded_error" in str(e):
+            await replyMessageObject.edit(content="Sorry, there's currently issues going on with the Anthropic API. Try again.")
+        else:
+            await replyMessageObject.edit(content="Sorry, there was an unexpected error. Please try again. If this continues, contact the host of this bot.")
+
+def resetConversationHistory():  # Once called, fully resets the convo history. Same thing as a new conversation I guess.
+    chatHistory.clear()
 
 async def chatThreadingCreator(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment):  # Needed by asyncio to put the chat function on new thread, as to not block the Discord API.
     await chat(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment)
@@ -160,7 +173,16 @@ class MyClient(discord.Client):
             return
         
         if message.content == "!e-brake":  # Restarts program. Useful when AI hangs.
+            print("EMERGENCY RESTART")
             emergencyRestart()
+
+        if message.content == "!new-convo":
+            print("RESETTING CHAT...")
+            print(chatHistory)
+            resetConversationHistory()
+            print("\n\n\n")
+            print(chatHistory)
+            return
 
         formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
                                 f"'{message.content}' IN CHANNEL '{message.channel.name}' AT "
