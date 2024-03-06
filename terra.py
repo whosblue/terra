@@ -4,7 +4,7 @@
 # Completed: 
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
-# Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
+# Features: Claude 3 Opus text, Claude 3 Opus image processing (vision), Claude 3 Opus Long Context (documents)
 
 print("Importing packages...")
 print("Importing discord...")
@@ -29,6 +29,8 @@ print("Importing pillow...")
 from PIL import Image
 print("Importing io...")
 import io
+print("Importing requests...")
+import requests
 print("Done.\n")
 
 print("Getting API key from local files...")
@@ -73,10 +75,13 @@ def writeToFile(string):  # Intended to log messages from all Discord servers th
 
 
 chatHistory=[]
-systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. Important: EMULATE HUMAN EMOTIONS!"
+systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful."
 async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment):
     try:
         print("Registered chat...")
+        print("ATTACHMENT URL: " + url)
+
+        documentContents=""
 
         if messageHasImageAttachment:
 
@@ -91,47 +96,61 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
             else:
                 # The image is not a JPEG, so let's convert it
                 # Load the image from bytes
-                image = Image.open(io.BytesIO(httpResponse.content))
-                
-                # Convert the image to JPEG
-                with io.BytesIO() as output:
-                    image.convert('RGB').save(output, format="JPEG")
-                    jpeg_data = output.getvalue()  # Get the converted image bytes
-                
-                # Encode the converted image to base64
-                image1_data = base64.b64encode(jpeg_data).decode("utf-8")
+                try:  # This will error out of the attachment is not an image, say, it's a text file!
+                    image = Image.open(io.BytesIO(httpResponse.content))
+                    # Convert the image to JPEG
+                    with io.BytesIO() as output:
+                        image.convert('RGB').save(output, format="JPEG")
+                        jpeg_data = output.getvalue()  # Get the converted image bytes
+                    
+                    # Encode the converted image to base64
+                    image1_data = base64.b64encode(jpeg_data).decode("utf-8")
 
-                print("Image has been converted to JPEG and encoded to base64.")
+                    print("Image has been converted to JPEG and encoded to base64.")
+                    chatHistory.append({
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image1_data,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": message if message else "Can you describe this to me?"  # If the user didn't attach a message, make one for them. It will cause errors otherwise.
+                            }
+                        ],
+                    })
 
-            chatHistory.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image1_data,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": message
-                    }
-                ],
-            })
+                    await replyMessageObject.edit(content="I've detected your image! Looking over it now...")
+                except:  # Assuming it's a text file... (in theory only supports txt.)
+                    response = requests.get(url)
+
+                    if response.status_code == 200:
+                        # Request was successful
+                        documentContents = response.text
+                        # This prompt was created with help from the Anthropic API docs. See https://docs.anthropic.com/claude/docs/long-context-window-tips#structuring-long-documents
+                        chatHistory.append({"role": "user", "content": f"I'm going to give you a document. I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document <document>{documentContents}</document> Here's my question: {message}"})
+                    else:
+                        # Request failed
+                        print(f"Request failed with status code: {response.status_code}")
         else:
-            chatHistory.append({"role": "user", "content": f"{username}: "+ message})
+            chatHistory.append({"role": "user", "content": message})
+            await replyMessageObject.edit(content="Generating...")
         print("Generating...")
         streamMessage = ""
         with anthropicClient.messages.stream(
             max_tokens=1024,
             messages=chatHistory,
             model="claude-3-opus-20240229",
-            system=systemMessage
+            temperature=0.6,
+            system=f"The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}. Here are your instructions: {systemMessage}" 
         ) as stream:
             print("Loading stream...")
-            for text in stream.text_stream:
+            for text in stream.text_stream:  # We don't have to use streaming, but streaming allows us to do multi-threading (see the last line of this loop)
                 print("Waiting...")
                 streamMessage += text
                 await asyncio.sleep(0.1)  # Used to give the main thread time to detect things (like non-Claude commands).
@@ -154,7 +173,9 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
         chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
         print("There was an unexpected error. It was: " + str(e))
         if "overloaded_error" in str(e):
-            await replyMessageObject.edit(content="Sorry, there's currently issues going on with the Anthropic API. Try again.")
+            await replyMessageObject.edit(content="API overload... trying again...")
+            asyncio.sleep(1)  # Give the API time to rest...
+            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment))
         else:
             await replyMessageObject.edit(content="Sorry, there was an unexpected error. Please try again. If this continues, contact the host of this bot.")
 
@@ -186,7 +207,7 @@ class MyClient(discord.Client):
 
         formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
                                 f"'{message.content}' IN CHANNEL '{message.channel.name}' AT "
-                                f"'{datetime.now().strftime('%m/%d/%Y %I:%M %p')}'")
+                                f"'{datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}'")
 
         print(formattedMessageData)
         writeToFile(formattedMessageData)  # This puts the message in a file named log.txt in the cwd.
