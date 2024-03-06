@@ -2,7 +2,7 @@
 Terra is a Discord chatbot featuring Claude 3 Opus. You will need to provide your own Discord application API key (that's free) and your own Anthropic API key (that's not free). Have fun! Read the installation guide below on how to proceed. This will not provide instructions on how to create a Discord Application Key (it's fairly easy, watch a 5 minute YouTube video.) or how to get an Anthropic API key.
 
 # Installation
-You must have Python installed, the latest version works fine.
+You must have Python installed, the latest version works fine. (make sure you installed Python to PATH, otherwise just reinstall it.)
  - Open cmd.
  - Type: "pip install discord anthropic asyncio pillow" without the quotes into cmd.
 
