@@ -4,7 +4,7 @@
 # Completed: 
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
-# Features: Claude 3 Opus text, Claude 3 Opus image processing (vision), Claude 3 Opus Long Context (documents)
+# Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
 
 print("Importing packages...")
 print("Importing discord...")
@@ -74,8 +74,9 @@ def writeToFile(string):  # Intended to log messages from all Discord servers th
 
 
 
+haultGenerationEvent = asyncio.Event()
 chatHistory=[]
-systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful."
+systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* ---> 😓)."
 async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment):
     try:
         print("Registered chat...")
@@ -84,7 +85,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
         documentContents=""
 
         if messageHasImageAttachment:
-
+            print("Detected image attachment.")
             image1_url = url
             image1_data = ""
 
@@ -150,10 +151,23 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
             system=f"The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}. Here are your instructions: {systemMessage}" 
         ) as stream:
             print("Loading stream...")
+
+            characterUpdateLimiter = 55
+            lengthAtLastUpdate = characterUpdateLimiter
             for text in stream.text_stream:  # We don't have to use streaming, but streaming allows us to do multi-threading (see the last line of this loop)
+                if haultGenerationEvent.is_set():  # Useful for when Claude 3 Opus might ever spontaneously combust.
+                    print("RECIEVED HAULT MESSAGE.") 
+                    haultGenerationEvent.clear()
+                    break 
                 print("Waiting...")
                 streamMessage += text
-                await asyncio.sleep(0.1)  # Used to give the main thread time to detect things (like non-Claude commands).
+                await asyncio.sleep(0.2)  # Used to give the main thread time to detect things (like non-Claude commands).
+                if len(streamMessage) > lengthAtLastUpdate and len(streamMessage) < 2000:  # Honestly, there's probably a better way to do this, but this serves as a limiter on calls to the Discord API, otherwise the Discord API will hault the execution until it's ready to accept the call.
+                    # This loop will stop streaming if the it goes over the character limit. I couldn't find a way to reliably keep streaming after that limit.
+                    # That's fine because the rest of the code will update the message when it's finished regardless, including splitting the old way.
+                    lengthAtLastUpdate = len(streamMessage) + characterUpdateLimiter
+                    print("LATU: " + str(lengthAtLastUpdate) + " - True SML: " + str(len(streamMessage)) + " - Limiter: " + str(characterUpdateLimiter))
+                    await replyMessageObject.edit(content=streamMessage)
 
         claudeMessage = streamMessage
         chatHistory.append({"role": "assistant", "content": claudeMessage})
@@ -197,12 +211,16 @@ class MyClient(discord.Client):
             print("EMERGENCY RESTART")
             emergencyRestart()
 
-        if message.content == "!new-convo":
+        if message.content == "!new-convo":  # Wipes conversation history, equivalent to a new convo.
             print("RESETTING CHAT...")
             print(chatHistory)
             resetConversationHistory()
             print("\n\n\n")
             print(chatHistory)
+            return
+
+        if message.content == "!hault":  # Makes the AI stop the current generation.
+            haultGenerationEvent.set()
             return
 
         formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
