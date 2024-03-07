@@ -79,6 +79,7 @@ chatHistory=[]
 systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* ---> 😓)."
 async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment):
     try:
+        haultGenerationEvent.clear()
         print("Registered chat...")
         print("ATTACHMENT URL: " + url)
 
@@ -220,6 +221,7 @@ class MyClient(discord.Client):
             return
 
         if message.content == "!hault":  # Makes the AI stop the current generation.
+            print("HAULTING...")
             haultGenerationEvent.set()
             return
 
