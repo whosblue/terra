@@ -32,3 +32,4 @@ and it will respond accordingly. That's it! Check back here for new releases and
 These are some pretty useful commands you can use while using Terra.
 - !e-brake - This restarts the program, helpful when Claude might freeze up.
 - !new-convo - This wipes the conversation history, as if you restarted the program. Brand new conversation!
+- !hault - Stops the current generation in turn for a new one.
