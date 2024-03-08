@@ -76,10 +76,12 @@ def writeToFile(string):  # Intended to log messages from all Discord servers th
 
 haultGenerationEvent = asyncio.Event()
 chatHistory=[]
-systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* ---> 😓)."
-async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment):
+lastModel=["smart"]  # Why? Why? Why????
+systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* --> 😓). Commands such as (!setSmart, !setQuick, !setUltraQuick) are commands sent by the user to internally change the model. Just respond that you have changed, do not generate a new response for previous messages unless directly asked."
+async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, modelSetting):
     try:
-        haultGenerationEvent.clear()
+        if modelSetting != "last": lastModel[0] = modelSetting  # If it isn't set to smart, the user had to have changed it.
+        haultGenerationEvent.clear()  # Reset the event because it's impossible to set the event this early, so it must be from an erroneous command.
         print("Registered chat...")
         print("ATTACHMENT URL: " + url)
 
@@ -135,7 +137,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                         # Request was successful
                         documentContents = response.text
                         # This prompt was created with help from the Anthropic API docs. See https://docs.anthropic.com/claude/docs/long-context-window-tips#structuring-long-documents
-                        chatHistory.append({"role": "user", "content": f"I'm going to give you a document. I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document <document>{documentContents}</document> Here's my question: {message}"})
+                        chatHistory.append({"role": "user", "content": f"I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document <document>{documentContents}</document> Here's my question: {message}"})
                     else:
                         # Request failed
                         print(f"Request failed with status code: {response.status_code}")
@@ -144,16 +146,21 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
             await replyMessageObject.edit(content="Generating...")
         print("Generating...")
         streamMessage = ""
+        modelType = {
+            "smart": "claude-3-opus-20240229",  # Most expensive, most powerful, slowest (which it isn't all that slow).
+            "quick": "claude-3-sonnet-20240229",  # Mid-range of both.
+            "ultra quick": "claude-instant-1.2"  # Cheapest, not that great, but very fast!
+        }
         with anthropicClient.messages.stream(
             max_tokens=1024,
             messages=chatHistory,
-            model="claude-3-opus-20240229",
+            model=modelType[lastModel[0]],
             temperature=0.6,
             system=f"The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}. Here are your instructions: {systemMessage}" 
         ) as stream:
             print("Loading stream...")
-
-            characterUpdateLimiter = 55
+            print(modelType[lastModel[0]])
+            characterUpdateLimiter = 55 if modelType[lastModel[0]] == "claude-3-opus-20240229" else 65 if modelType[lastModel[0]] == "claude-3-sonnet-20240229" else 115
             lengthAtLastUpdate = characterUpdateLimiter
             for text in stream.text_stream:  # We don't have to use streaming, but streaming allows us to do multi-threading (see the last line of this loop)
                 if haultGenerationEvent.is_set():  # Useful for when Claude 3 Opus might ever spontaneously combust.
@@ -162,13 +169,17 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                     break 
                 print("Waiting...")
                 streamMessage += text
-                await asyncio.sleep(0.2)  # Used to give the main thread time to detect things (like non-Claude commands).
-                if len(streamMessage) > lengthAtLastUpdate and len(streamMessage) < 2000:  # Honestly, there's probably a better way to do this, but this serves as a limiter on calls to the Discord API, otherwise the Discord API will hault the execution until it's ready to accept the call.
+                await asyncio.sleep(0.01)  # Used to give the main thread time to detect things (like non-Claude commands).
+                if len(streamMessage) > lengthAtLastUpdate and len(streamMessage) < 1997:  # Honestly, there's probably a better way to do this, but this serves as a limiter on calls to the Discord API, otherwise the Discord API will hault the execution until it's ready to accept the call.
                     # This loop will stop streaming if the it goes over the character limit. I couldn't find a way to reliably keep streaming after that limit.
                     # That's fine because the rest of the code will update the message when it's finished regardless, including splitting the old way.
-                    lengthAtLastUpdate = len(streamMessage) + characterUpdateLimiter
-                    print("LATU: " + str(lengthAtLastUpdate) + " - True SML: " + str(len(streamMessage)) + " - Limiter: " + str(characterUpdateLimiter))
-                    await replyMessageObject.edit(content=streamMessage)
+                    if ("".join(streamMessage[-3]) == "..."):  # This is the reason for the 1997 limit, rather than 2000.
+                        streamedMessageOut = streamMessage[-3]+ "..."
+                    else:
+                        streamedMessageOut = streamMessage + "..."
+                    lengthAtLastUpdate = len(streamedMessageOut) + characterUpdateLimiter
+                    print("LATU: " + str(lengthAtLastUpdate) + " - True SML: " + str(len(streamedMessageOut)) + " - Limiter: " + str(characterUpdateLimiter))
+                    await replyMessageObject.edit(content=streamedMessageOut)
 
         claudeMessage = streamMessage
         chatHistory.append({"role": "assistant", "content": claudeMessage})
@@ -183,22 +194,22 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                 return  # Exit. We're done.
         
         await replyMessageObject.edit(content=claudeMessage)
-        print("\nFinished.")
+        print(f"Finished, model: {lastModel[0]} ({modelType[lastModel[0]]}) - Streaming limiter: {characterUpdateLimiter}")
     except Exception as e:
         chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
         print("There was an unexpected error. It was: " + str(e))
         if "overloaded_error" in str(e):
             await replyMessageObject.edit(content="API overload... trying again...")
             asyncio.sleep(1)  # Give the API time to rest...
-            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment))
+            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, "last"))
         else:
             await replyMessageObject.edit(content="Sorry, there was an unexpected error. Please try again. If this continues, contact the host of this bot.")
 
 def resetConversationHistory():  # Once called, fully resets the convo history. Same thing as a new conversation I guess.
     chatHistory.clear()
 
-async def chatThreadingCreator(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment):  # Needed by asyncio to put the chat function on new thread, as to not block the Discord API.
-    await chat(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment)
+async def chatThreadingCreator(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar):  # Needed by asyncio to put the chat function on new thread, as to not block the Discord API.
+    await chat(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar)
 
 class MyClient(discord.Client):
     async def on_ready(self):
@@ -210,6 +221,7 @@ class MyClient(discord.Client):
         
         if message.content == "!e-brake":  # Restarts program. Useful when AI hangs.
             print("EMERGENCY RESTART")
+            await message.reply("Restarting program...")
             emergencyRestart()
 
         if message.content == "!new-convo":  # Wipes conversation history, equivalent to a new convo.
@@ -218,11 +230,13 @@ class MyClient(discord.Client):
             resetConversationHistory()
             print("\n\n\n")
             print(chatHistory)
+            await message.reply("Alright, let's start things fresh.")  # Bing ('copilot'), anyone?
             return
 
         if message.content == "!hault":  # Makes the AI stop the current generation.
             print("HAULTING...")
             haultGenerationEvent.set()
+            await message.reply("Successfully haulted generation.")
             return
 
         formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
@@ -241,10 +255,15 @@ class MyClient(discord.Client):
             sentMessage = discord.Message
             sentMessage = await message.reply("Hang on...")
             # Multi-threading! Discord API will no longer be blocked. Useful for emergency program closing. (!e-brake)
-            if hasImageAttachment:
-                asyncio.create_task(chatThreadingCreator(message.content, message.author.name, message, sentMessage, message.attachments[0].url, hasImageAttachment)) 
-            else:
-                asyncio.create_task(chatThreadingCreator(message.content, message.author.name, message, sentMessage, "", False))
+            asyncio.create_task(chatThreadingCreator(
+                message.content,
+                message.author.name,
+                message,
+                sentMessage,
+                message.attachments[0].url if hasImageAttachment else "",
+                hasImageAttachment,
+                "quick" if message.content.startswith("!setQuick") else "ultra quick" if message.content.startswith("!setUltraQuick") else "smart" if message.content.startswith("!setSmart") else "last"  # Last setting defaults to smart.
+            ))
             
 
 
