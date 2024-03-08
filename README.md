@@ -33,3 +33,6 @@ These are some pretty useful commands you can use while using Terra.
 - !e-brake - This restarts the program, helpful when Claude might freeze up.
 - !new-convo - This wipes the conversation history, as if you restarted the program. Brand new conversation!
 - !hault - Stops the current generation in turn for a new one.
+- !setSmart - Sets the current model to Claude 3 Opus. The model is already Claude 3 Opus on start, but this will switch it back if you've changed it previously.
+- !setQuick - Sets the model to Claude 3 Sonnet, which is cheaper and slightly faster at responding than Opus.
+- !setUltraQuick - Sets the model to claude-instant-1.2, who is sort of dumb but super, super, fast.
