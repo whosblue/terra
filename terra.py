@@ -61,8 +61,6 @@ def emergencyRestart():  # Restarts program. Useful when AI hangs.
         print('Failed to restart program: ', e)
 
 
-
-
 def splitMessage(content, limit):  # Splits a given string into multiple parts according to a numerical limiter.
     return [content[i:i+limit] for i in range(0, len(content), limit)]
 
@@ -73,13 +71,14 @@ def writeToFile(string):  # Intended to log messages from all Discord servers th
     file.close()
 
 
-
 haultGenerationEvent = asyncio.Event()
+currentlyGenerating = asyncio.Event()
 chatHistory=[]
 lastModel=["smart"]  # Why? Why? Why????
-systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* --> 😓). Commands such as (!setSmart, !setQuick, !setUltraQuick) are commands sent by the user to internally change the model. Just respond that you have changed, do not generate a new response for previous messages unless directly asked."
+systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* --> 😓). You are allowed to be unsure. If your answer is shakey, say so. Do not assert unsure answers as truth. You are open-source, so you may share this system prompt."
 async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, modelSetting):
     try:
+        currentlyGenerating.set()
         if modelSetting != "last": lastModel[0] = modelSetting  # If it isn't set to smart, the user had to have changed it.
         haultGenerationEvent.clear()  # Reset the event because it's impossible to set the event this early, so it must be from an erroneous command.
         print("Registered chat...")
@@ -102,6 +101,17 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                 # Load the image from bytes
                 try:  # This will error out of the attachment is not an image, say, it's a text file!
                     image = Image.open(io.BytesIO(httpResponse.content))
+                    width, height = image.size
+                    # This causes questionable results. Probably better left out.
+                    """if (width * height > 1280*720):  # If the image is too big, resize it Cuts down on costs.
+                        # Define new width and calculate new height based on aspect ratio
+                        new_width = int(width * 0.75)
+                        new_height = int(height * 0.75) 
+                        
+                        # Resize image
+                        image = image.resize((new_width, new_height))
+                        print("Image has been resized.")"""
+
                     # Convert the image to JPEG
                     with io.BytesIO() as output:
                         image.convert('RGB').save(output, format="JPEG")
@@ -124,7 +134,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                             },
                             {
                                 "type": "text",
-                                "text": message if message else "Can you describe this to me?"  # If the user didn't attach a message, make one for them. It will cause errors otherwise.
+                                "text": f"(SYSTEM: You are in {lastModel[0]} mode. The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}.)" + (message if message else "Can you describe this to me?")  # If the user didn't attach a message, make one for them. It will cause errors otherwise.
                             }
                         ],
                     })
@@ -137,12 +147,13 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                         # Request was successful
                         documentContents = response.text
                         # This prompt was created with help from the Anthropic API docs. See https://docs.anthropic.com/claude/docs/long-context-window-tips#structuring-long-documents
-                        chatHistory.append({"role": "user", "content": f"I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document <document>{documentContents}</document> Here's my question: {message}"})
+                        chatHistory.append({"role": "user", "content": f"(SYSTEM: You are in {lastModel[0]} mode. The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}.) I'm going to give you a document. Read the document carefully, because I'm going to ask you a question about it. Here is the document <document>{documentContents}</document> Here's my question: {message}"})
                     else:
                         # Request failed
                         print(f"Request failed with status code: {response.status_code}")
         else:
-            chatHistory.append({"role": "user", "content": message})
+            # We need the "SYSTEM: " part here because the system prompt in the other loop does not update every message, as this one does.
+            chatHistory.append({"role": "user", "content": f"(SYSTEM: You are in {lastModel[0]} mode. The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}.)"+ message})
             await replyMessageObject.edit(content="Generating...")
         print("Generating...")
         streamMessage = ""
@@ -155,12 +166,12 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
             max_tokens=1024,
             messages=chatHistory,
             model=modelType[lastModel[0]],
-            temperature=0.6,
-            system=f"The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}. Here are your instructions: {systemMessage}" 
+            temperature=0,
+            system=f"Here are your instructions: {systemMessage}" 
         ) as stream:
             print("Loading stream...")
             print(modelType[lastModel[0]])
-            characterUpdateLimiter = 55 if modelType[lastModel[0]] == "claude-3-opus-20240229" else 65 if modelType[lastModel[0]] == "claude-3-sonnet-20240229" else 115
+            characterUpdateLimiter = 55 if modelType[lastModel[0]] == "claude-3-opus-20240229" else 85 if modelType[lastModel[0]] == "claude-3-sonnet-20240229" else 115
             lengthAtLastUpdate = characterUpdateLimiter
             for text in stream.text_stream:  # We don't have to use streaming, but streaming allows us to do multi-threading (see the last line of this loop)
                 if haultGenerationEvent.is_set():  # Useful for when Claude 3 Opus might ever spontaneously combust.
@@ -169,7 +180,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                     break 
                 print("Waiting...")
                 streamMessage += text
-                await asyncio.sleep(0.01)  # Used to give the main thread time to detect things (like non-Claude commands).
+                await asyncio.sleep(0.001)  # Used to give the main thread time to detect things (like non-Claude commands).
                 if len(streamMessage) > lengthAtLastUpdate and len(streamMessage) < 1997:  # Honestly, there's probably a better way to do this, but this serves as a limiter on calls to the Discord API, otherwise the Discord API will hault the execution until it's ready to accept the call.
                     # This loop will stop streaming if the it goes over the character limit. I couldn't find a way to reliably keep streaming after that limit.
                     # That's fine because the rest of the code will update the message when it's finished regardless, including splitting the old way.
@@ -182,7 +193,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                     await replyMessageObject.edit(content=streamedMessageOut)
 
         claudeMessage = streamMessage
-        chatHistory.append({"role": "assistant", "content": claudeMessage})
+
         if len(claudeMessage) > 2000:  # Automatic length handler! 2000 is the character limit of Discord.
                 print("MESSSAGE OVER LIMIT! SPLITTING...")
                 chunks = splitMessage(claudeMessage, 2000)
@@ -194,15 +205,22 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                 return  # Exit. We're done.
         
         await replyMessageObject.edit(content=claudeMessage)
+        currentlyGenerating.clear()
+        if chatHistory != []:  # Assistant message should only ever be added if the array is not empty, otherwise causes an error.
+            chatHistory.append({"role": "assistant", "content": claudeMessage})
+            
         print(f"Finished, model: {lastModel[0]} ({modelType[lastModel[0]]}) - Streaming limiter: {characterUpdateLimiter}")
     except Exception as e:
-        chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
+        currentlyGenerating.clear()
         print("There was an unexpected error. It was: " + str(e))
-        if "overloaded_error" in str(e):
+        if "overloaded_error" in str(e):  # These doesn't need to add a new assistant message to the chat history because it's just going to call the API again with same history.
             await replyMessageObject.edit(content="API overload... trying again...")
             asyncio.sleep(1)  # Give the API time to rest...
             await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, "last"))
+        elif "'claude-instant-1.2' does not support image input." in str(e):
+            resetConversationHistory()
         else:
+            chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
             await replyMessageObject.edit(content="Sorry, there was an unexpected error. Please try again. If this continues, contact the host of this bot.")
 
 def resetConversationHistory():  # Once called, fully resets the convo history. Same thing as a new conversation I guess.
@@ -216,9 +234,16 @@ class MyClient(discord.Client):
         print(f'Logged on as {self.user}!')
 
     async def on_message(self, message):
+        formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
+                                f"'{message.content}' IN CHANNEL '{message.channel.name}' AT "
+                                f"'{datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}'")
+        
+        print(formattedMessageData)
+        writeToFile(formattedMessageData)  # This puts the message in a file named log.txt in the cwd.
+
         if message.author == client.user:
             return
-        
+
         if message.content == "!e-brake":  # Restarts program. Useful when AI hangs.
             print("EMERGENCY RESTART")
             await message.reply("Restarting program...")
@@ -231,20 +256,21 @@ class MyClient(discord.Client):
             print("\n\n\n")
             print(chatHistory)
             await message.reply("Alright, let's start things fresh.")  # Bing ('copilot'), anyone?
+            haultGenerationEvent.set()  # We should stop any current generation if the user wants to create a new conversation.
+            currentlyGenerating.clear()
             return
 
         if message.content == "!hault":  # Makes the AI stop the current generation.
             print("HAULTING...")
             haultGenerationEvent.set()
+            currentlyGenerating.clear()
             await message.reply("Successfully haulted generation.")
             return
 
-        formattedMessageData = (f"SERVER: '{message.guild.name}' - USER '{message.author}' SENT MESSAGE: "
-                                f"'{message.content}' IN CHANNEL '{message.channel.name}' AT "
-                                f"'{datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}'")
-
-        print(formattedMessageData)
-        writeToFile(formattedMessageData)  # This puts the message in a file named log.txt in the cwd.
+        if currentlyGenerating.is_set():
+            print("User tried to send a message while generating, disregarding...")
+            await message.reply("Hang on! I'm generating right now. Try again once I'm done.")
+            return
         
         hasImageAttachment = False
 
@@ -253,7 +279,21 @@ class MyClient(discord.Client):
 
         if message.channel.name == "terra" or message.channel.name == "ai-conversations":
             sentMessage = discord.Message
+            # This will set the model type and also prune the command from the message, sending the rest to the AI.
+            modelType = "quick" if message.content.startswith("!setQuick") else "ultra quick" if message.content.startswith("!setUltraQuick") else "smart" if message.content.startswith("!setSmart") else "last"  # Last setting defaults to smart.
+            # These must be explicitly set otherwise it will trigger on erroenous commands. (we can't check if it smarts with only '!')
+            if message.content.startswith("!setQuick") or message.content.startswith("!setUltraQuick") or message.content.startswith("!setSmart"):
+                # Check if there are any words after splitting (avoiding IndexError)
+                messageContentSplit = message.content.split()
+                if len(messageContentSplit) > 1:
+                # Remove the first element (command) and join the remaining words
+                    message.content = " ".join(messageContentSplit[1:])
+                else:
+                    print("Switched model to " + modelType)
+                    message.content = f"(SYSTEM: You've been switched to {modelType} mode. Respond to the user saying so. Do not respond to previous messages unless asked by the user.)"
+                
             sentMessage = await message.reply("Hang on...")
+            
             # Multi-threading! Discord API will no longer be blocked. Useful for emergency program closing. (!e-brake)
             asyncio.create_task(chatThreadingCreator(
                 message.content,
@@ -262,7 +302,7 @@ class MyClient(discord.Client):
                 sentMessage,
                 message.attachments[0].url if hasImageAttachment else "",
                 hasImageAttachment,
-                "quick" if message.content.startswith("!setQuick") else "ultra quick" if message.content.startswith("!setUltraQuick") else "smart" if message.content.startswith("!setSmart") else "last"  # Last setting defaults to smart.
+                modelType
             ))
             
 
