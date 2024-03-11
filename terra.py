@@ -5,6 +5,7 @@
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
 # Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
+# Version 1.5 - 3/9/2024
 
 print("Importing packages...")
 print("Importing discord...")
@@ -95,15 +96,37 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
 
             # Check if the Content-Type of the response indicates a JPEG image
             if httpResponse.headers['Content-Type'] == "image/jpeg":
+                print("Image was detected as a JPEG.")
                 image1_data = base64.b64encode(httpResponse.content).decode("utf-8")
+
+                chatHistory.append({
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image1_data,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": f"(SYSTEM: You are in {lastModel[0]} mode. The user's name is: {username}. Today's date is {datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}.)" + (message if message else "Can you describe this to me?")  # If the user didn't attach a message, make one for them. It will cause errors otherwise.
+                            }
+                        ],
+                    })
             else:
                 # The image is not a JPEG, so let's convert it
                 # Load the image from bytes
                 try:  # This will error out of the attachment is not an image, say, it's a text file!
+                    print("Converting image...")
                     image = Image.open(io.BytesIO(httpResponse.content))
-                    width, height = image.size
+
                     # This causes questionable results. Probably better left out.
-                    """if (width * height > 1280*720):  # If the image is too big, resize it Cuts down on costs.
+                    """
+                    width, height = image.size
+                    if (width * height > 1280*720):  # If the image is too big, resize it. Cuts down on costs.
                         # Define new width and calculate new height based on aspect ratio
                         new_width = int(width * 0.75)
                         new_height = int(height * 0.75) 
@@ -112,11 +135,14 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                         image = image.resize((new_width, new_height))
                         print("Image has been resized.")"""
 
+                    print("Opening...")
+
                     # Convert the image to JPEG
                     with io.BytesIO() as output:
                         image.convert('RGB').save(output, format="JPEG")
                         jpeg_data = output.getvalue()  # Get the converted image bytes
                     
+                    print("Decoding...")
                     # Encode the converted image to base64
                     image1_data = base64.b64encode(jpeg_data).decode("utf-8")
 
@@ -138,9 +164,11 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                             }
                         ],
                     })
-
+                    print("Successfully finised image conversion. Continuing...")
                     await replyMessageObject.edit(content="I've detected your image! Looking over it now...")
-                except:  # Assuming it's a text file... (in theory only supports txt.)
+                except Exception as e:  # Assuming it's a text file... (in theory only supports txt.)
+                    print(e)
+                    print("Image attachment was not an image. Converting to text...")
                     response = requests.get(url)
 
                     if response.status_code == 200:
@@ -241,43 +269,43 @@ class MyClient(discord.Client):
         print(formattedMessageData)
         writeToFile(formattedMessageData)  # This puts the message in a file named log.txt in the cwd.
 
-        if message.author == client.user:
-            return
-
-        if message.content == "!e-brake":  # Restarts program. Useful when AI hangs.
-            print("EMERGENCY RESTART")
-            await message.reply("Restarting program...")
-            emergencyRestart()
-
-        if message.content == "!new-convo":  # Wipes conversation history, equivalent to a new convo.
-            print("RESETTING CHAT...")
-            print(chatHistory)
-            resetConversationHistory()
-            print("\n\n\n")
-            print(chatHistory)
-            await message.reply("Alright, let's start things fresh.")  # Bing ('copilot'), anyone?
-            haultGenerationEvent.set()  # We should stop any current generation if the user wants to create a new conversation.
-            currentlyGenerating.clear()
-            return
-
-        if message.content == "!hault":  # Makes the AI stop the current generation.
-            print("HAULTING...")
-            haultGenerationEvent.set()
-            currentlyGenerating.clear()
-            await message.reply("Successfully haulted generation.")
-            return
-
-        if currentlyGenerating.is_set():
-            print("User tried to send a message while generating, disregarding...")
-            await message.reply("Hang on! I'm generating right now. Try again once I'm done.")
-            return
-        
-        hasImageAttachment = False
-
-        for attachment in message.attachments:
-           hasImageAttachment = True
-
         if message.channel.name == "terra" or message.channel.name == "ai-conversations":
+            if message.author == client.user:
+                return
+
+            if message.content == "!e-brake":  # Restarts program. Useful when AI hangs.
+                print("EMERGENCY RESTART")
+                await message.reply("Restarting program...")
+                emergencyRestart()
+
+            if message.content == "!new-convo":  # Wipes conversation history, equivalent to a new convo.
+                print("RESETTING CHAT...")
+                print(chatHistory)
+                resetConversationHistory()
+                print("\n\n\n")
+                print(chatHistory)
+                await message.reply("Alright, let's start things fresh.")  # Bing ('copilot'), anyone?
+                haultGenerationEvent.set()  # We should stop any current generation if the user wants to create a new conversation.
+                currentlyGenerating.clear()
+                return
+
+            if message.content == "!hault":  # Makes the AI stop the current generation.
+                print("HAULTING...")
+                haultGenerationEvent.set()
+                currentlyGenerating.clear()
+                await message.reply("Successfully haulted generation.")
+                return
+
+            if currentlyGenerating.is_set():
+                print("User tried to send a message while generating, disregarding...")
+                await message.reply("Hang on! I'm generating right now. Try again once I'm done.")
+                return
+            
+            hasImageAttachment = False
+
+            for attachment in message.attachments:
+                hasImageAttachment = True
+
             sentMessage = discord.Message
             # This will set the model type and also prune the command from the message, sending the rest to the AI.
             modelType = "quick" if message.content.startswith("!setQuick") else "ultra quick" if message.content.startswith("!setUltraQuick") else "smart" if message.content.startswith("!setSmart") else "last"  # Last setting defaults to smart.
