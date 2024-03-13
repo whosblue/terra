@@ -1,5 +1,5 @@
 # terra
-Terra is a Discord chatbot featuring Claude 3 Opus (or other Claude models, given you switch (see IMPORTANT COMMANDS)). You will need to provide your own Discord application API key (that's free) and your own Anthropic API key (that's not free). Have fun! Read the installation guide below on how to proceed. This will not provide instructions on how to create a Discord Application Key (it's fairly easy, watch a 5 minute YouTube video.) or how to get an Anthropic API key.
+Terra is a Discord chatbot featuring Claude 3 Opus (and the rest of the Claude 3 family, see IMPORTANT COMMANDS.). You will need to provide your own Discord application API key (that's free) and your own Anthropic API key (that's not free). Have fun! Read the installation guide below on how to proceed. This will not provide instructions on how to create a Discord Application Key (it's fairly easy, watch a 5 minute YouTube video.) or how to get an Anthropic API key.
 
 # Installation
 You must have Python installed, the latest version works fine. (make sure you installed Python to PATH, otherwise just reinstall it.)
@@ -35,4 +35,4 @@ These are some pretty useful commands you can use while using Terra.
 - !hault - Stops the current generation in turn for a new one.
 - !setSmart - Sets the current model to Claude 3 Opus. The model is already Claude 3 Opus on start, but this will switch it back if you've changed it previously.
 - !setQuick - Sets the model to Claude 3 Sonnet, which is cheaper and slightly faster at responding than Opus.
-- !setUltraQuick - Sets the model to claude-instant-1.2, who is sort of dumb but super, super, fast.
+- !setUltraQuick - Sets the model to Claude 3 Haiku, which is cheapest and may be a slight bit dumber.
