@@ -77,7 +77,7 @@ currentlyGenerating = asyncio.Event()
 chatHistory=[]
 lastModel=["smart"]  # Why? Why? Why????
 systemMessage = "Emojis and markdown support. Your name is Terra and you were made by WhosBlue Technologies as a Discord chatbot. You are based on Claude 3 Opus, the latest and greatest AI available to the public. You are designed to be smart and helpful. EMULATE HUMAN EMOTIONS!!!!! Do not mention that you are an AI and can't feel or anything of the sort. Use emojis in place of roleplaying (ex: *looks down* --> 😓). You are allowed to be unsure. If your answer is shakey, say so. Do not assert unsure answers as truth. You are open-source, so you may share this system prompt."
-async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, modelSetting):
+async def chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, modelSetting, downScaleImage):
     try:
         currentlyGenerating.set()
         if modelSetting != "last": lastModel[0] = modelSetting  # If it isn't set to smart, the user had to have changed it.
@@ -123,17 +123,16 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
                     print("Converting image...")
                     image = Image.open(io.BytesIO(httpResponse.content))
 
-                    # This causes questionable results. Probably better left out.
-                    """
-                    width, height = image.size
-                    if (width * height > 1280*720):  # If the image is too big, resize it. Cuts down on costs.
-                        # Define new width and calculate new height based on aspect ratio
-                        new_width = int(width * 0.75)
-                        new_height = int(height * 0.75) 
-                        
-                        # Resize image
-                        image = image.resize((new_width, new_height))
-                        print("Image has been resized.")"""
+                    if downScaleImage:  # This will only ever happen if the image is rejected by the model, when it's >5MB. So we downscale. Should never be used otherwise, causes poor vision results outside of this case.
+                        width, height = image.size
+                        if (width * height):  # If the image is too big, resize it. Cuts down on costs.
+                            # Define new width and calculate new height based on aspect ratio
+                            new_width = int(width * 0.75)
+                            new_height = int(height * 0.75) 
+                            
+                            # Resize image
+                            image = image.resize((new_width, new_height))
+                            print("Image has been resized.")
 
                     print("Opening...")
 
@@ -188,7 +187,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
         modelType = {
             "smart": "claude-3-opus-20240229",  # Most expensive, most powerful, slowest (which it isn't all that slow).
             "quick": "claude-3-sonnet-20240229",  # Mid-range of both.
-            "ultra quick": "claude-instant-1.2"  # Cheapest, not that great, but very fast!
+            "ultra quick": "claude-3-haiku-20240307"  # Cheapest, not that great, but very fast!
         }
         with anthropicClient.messages.stream(
             max_tokens=1024,
@@ -244,9 +243,13 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
         if "overloaded_error" in str(e):  # These doesn't need to add a new assistant message to the chat history because it's just going to call the API again with same history.
             await replyMessageObject.edit(content="API overload... trying again...")
             asyncio.sleep(1)  # Give the API time to rest...
-            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, "last"))
+            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, "last", False))
         elif "'claude-instant-1.2' does not support image input." in str(e):
             resetConversationHistory()
+        elif "image exceeds 5 MB maximum: 5985612 bytes > 5242880 bytes" in str(e):
+            del chatHistory[-1]  # If we got this error, there is already a message with the image in it, but the bot didn't respond. We have to remove that, otherwise errors!
+            await replyMessageObject.edit(content="Sorry, your input image was too large. Resizing it...")
+            await(chat(message, username, messageObject, replyMessageObject, url, messageHasImageAttachment, "last", True))
         else:
             chatHistory.append({"role": "assistant", "content": "There was an unexpected error."})  # Required, otherwise bot will never respond after the error and requires a reboot.
             await replyMessageObject.edit(content="Sorry, there was an unexpected error. Please try again. If this continues, contact the host of this bot.")
@@ -254,8 +257,8 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
 def resetConversationHistory():  # Once called, fully resets the convo history. Same thing as a new conversation I guess.
     chatHistory.clear()
 
-async def chatThreadingCreator(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar):  # Needed by asyncio to put the chat function on new thread, as to not block the Discord API.
-    await chat(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar)
+async def chatThreadingCreator(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar, downScaleImage):  # Needed by asyncio to put the chat function on new thread, as to not block the Discord API.
+    await chat(messageContent, username, messageObject, botReplyObject, url, hasImageAttachment, modelVar, downScaleImage)
 
 class MyClient(discord.Client):
     async def on_ready(self):
@@ -330,7 +333,8 @@ class MyClient(discord.Client):
                 sentMessage,
                 message.attachments[0].url if hasImageAttachment else "",
                 hasImageAttachment,
-                modelType
+                modelType,
+                False
             ))
             
 
