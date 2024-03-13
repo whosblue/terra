@@ -5,7 +5,9 @@
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
 # Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
-# Version 1.5 - 3/9/2024
+# Version 1.6, 3/13/2024
+
+print("Version 1.6, 3/13/2024\n")
 
 print("Importing packages...")
 print("Importing discord...")
