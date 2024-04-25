@@ -5,9 +5,10 @@
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
 # Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
-# Version 1.6, 3/13/2024
+# Version 1.7, 4/252024
+# Update: Upped the streaming limiters by 20. Claude responds a tad bit too fast for Discord's API.
 
-print("Version 1.6, 3/13/2024\n")
+print("Version 1.7, 4/252024\n")
 
 print("Importing packages...")
 print("Importing discord...")
@@ -200,7 +201,7 @@ async def chat(message, username, messageObject, replyMessageObject, url, messag
         ) as stream:
             print("Loading stream...")
             print(modelType[lastModel[0]])
-            characterUpdateLimiter = 55 if modelType[lastModel[0]] == "claude-3-opus-20240229" else 85 if modelType[lastModel[0]] == "claude-3-sonnet-20240229" else 115
+            characterUpdateLimiter = 85 if modelType[lastModel[0]] == "claude-3-opus-20240229" else 115 if modelType[lastModel[0]] == "claude-3-sonnet-20240229" else 135
             lengthAtLastUpdate = characterUpdateLimiter
             for text in stream.text_stream:  # We don't have to use streaming, but streaming allows us to do multi-threading (see the last line of this loop)
                 if haultGenerationEvent.is_set():  # Useful for when Claude 3 Opus might ever spontaneously combust.
