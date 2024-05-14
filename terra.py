@@ -5,10 +5,10 @@
 # Purpose: Claude 3 Opus interaction via Discord.
 # Notes:
 # Features: Claude 3 Opus text, Claude 3 Opus image processing (vision)
-# Version 1.7, 4/252024
-# Update: Upped the streaming limiters by 20. Claude responds a tad bit too fast for Discord's API.
+# Version 1.8, 5/14/2024
+# Update: Fixed an encoding error with writeToFile where it would cause an error and stop generation. Read the commit to GitHub for more information.
 
-print("Version 1.7, 4/252024\n")
+print("Version 1.8, 5/14/2024\n")
 
 print("Importing packages...")
 print("Importing discord...")
@@ -70,9 +70,8 @@ def splitMessage(content, limit):  # Splits a given string into multiple parts a
 
 
 def writeToFile(string):  # Intended to log messages from all Discord servers the bot is in to a file.
-    file = open("log.txt", "a")
-    file.write(string + "\n")
-    file.close()
+    with open("log.txt", "a", encoding="utf-8") as file:
+        file.write(string + "\n")
 
 
 haultGenerationEvent = asyncio.Event()
@@ -273,7 +272,7 @@ class MyClient(discord.Client):
                                 f"'{datetime.now().strftime('%A %m/%d/%Y %I:%M %p')}'")
         
         print(formattedMessageData)
-        writeToFile(formattedMessageData)  # This puts the message in a file named log.txt in the cwd.
+        writeToFile(str(formattedMessageData))  # This puts the message in a file named log.txt in the cwd.
 
         if message.channel.name == "terra" or message.channel.name == "ai-conversations":
             if message.author == client.user:
