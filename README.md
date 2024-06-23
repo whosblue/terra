@@ -1,3 +1,4 @@
+Note: This project is most likely not going to recieve any new updates or features, other than updates to ensure that it actually works as intended. It's been updated as far as possible, it has as many features as I could possibly think of or want.
 # terra
 Terra is a Discord chatbot featuring Claude 3 Opus (and the rest of the Claude 3 family, see IMPORTANT COMMANDS.). You will need to provide your own Discord application API key (that's free) and your own Anthropic API key (that's not free). Have fun! Read the installation guide below on how to proceed. This will not provide instructions on how to create a Discord Application Key (it's fairly easy, watch a 5 minute YouTube video.) or how to get an Anthropic API key.
 
